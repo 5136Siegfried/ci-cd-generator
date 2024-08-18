@@ -1,0 +1,44 @@
+name: Docker Deployment via SSH
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Docker App on VM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install SSH Client
+        run: sudo apt-get update && sudo apt-get install -y openssh-client
+
+      - name: Setup SSH Key
+        uses: webfactory/ssh-agent@v1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy Application via SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            # Update package list and install Docker if it's not already installed
+            if ! command -v docker &> /dev/null
+            then
+                sudo apt-get update
+                sudo apt-get install -y docker.io
+            fi
+
+            # Pull the latest image and run the container
+            docker pull ${{ secrets.DOCKER_IMAGE }}
+            docker stop my-app || true
+            docker rm my-app || true
+            docker run -d --name my-app -p 80:80 ${{ secrets.DOCKER_IMAGE }}
+          EOF
